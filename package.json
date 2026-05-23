@@ -1,0 +1,22 @@
+{
+  "name": "sosmed-auto-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Auto-generate caption & schedule posting konten ke TikTok, Instagram Reels, Facebook Page. Dashboard + serverless API, deployable ke Vercel.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "vercel dev"
+  },
+  "keywords": [
+    "social-media",
+    "automation",
+    "n8n",
+    "tiktok",
+    "instagram",
+    "facebook",
+    "vercel"
+  ]
+}

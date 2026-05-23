@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SosMed Auto · Dashboard Konten</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: { 50:'#eef2ff', 500:'#6366f1', 600:'#4f46e5', 700:'#4338ca' }
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  .platform-chip { transition: all .15s ease; }
+  .platform-chip.active { transform: scale(1.05); }
+  .toast-enter { animation: toastIn .2s ease-out; }
+  @keyframes toastIn { from { transform: translateY(-8px); opacity: 0 } to { transform: none; opacity: 1 } }
+  .spinner { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+<div class="flex min-h-screen">
+
+  <!-- Sidebar -->
+  <aside class="w-60 bg-white border-r border-slate-200 flex flex-col">
+    <div class="px-5 py-5 border-b border-slate-100">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-brand-600 grid place-items-center text-white font-bold">S</div>
+        <div>
+          <div class="font-semibold leading-tight">SosMed Auto</div>
+          <div class="text-xs text-slate-500">Content Scheduler</div>
+        </div>
+      </div>
+    </div>
+    <nav class="flex-1 p-3 space-y-1 text-sm">
+      <a class="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-50 text-brand-700 font-medium" href="#">
+        <span>📊</span> Dashboard
+      </a>
+      <a class="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50" href="#generate">
+        <span>✍️</span> Generate Konten
+      </a>
+      <a class="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50" href="#queue">
+        <span>📅</span> Antrian Posting
+      </a>
+      <a class="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50" href="/workflow.n8n.json" target="_blank">
+        <span>🔗</span> Workflow n8n
+      </a>
+      <a class="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50" href="/api/health" target="_blank">
+        <span>⚙️</span> API Status
+      </a>
+    </nav>
+    <div class="p-3 border-t border-slate-100 text-xs text-slate-500 space-y-1">
+      <div class="flex items-center gap-2">
+        <span id="apiDot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+        API: <span id="apiStatus" class="font-medium text-slate-600">checking…</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+        Mode: <span id="modeLabel" class="font-medium text-amber-700">demo</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 p-8">
+    <header class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-semibold">Dashboard Konten</h1>
+        <p class="text-sm text-slate-500">Generate caption otomatis &amp; schedule posting ke TikTok, Instagram, Facebook</p>
+      </div>
+      <div class="flex items-center gap-3 text-sm text-slate-500">
+        <span>Hari ini · <span id="todayDate"></span></span>
+        <button id="btnClear" class="text-xs px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-100">Reset data</button>
+      </div>
+    </header>
+
+    <!-- Stats -->
+    <section class="grid grid-cols-4 gap-4 mb-8">
+      <div class="bg-white rounded-xl border border-slate-200 p-4">
+        <div class="text-xs text-slate-500">Total Konten</div>
+        <div id="statTotal" class="text-2xl font-semibold mt-1">0</div>
+        <div class="text-xs text-slate-500 mt-1">tersimpan di antrian</div>
+      </div>
+      <div class="bg-white rounded-xl border border-slate-200 p-4">
+        <div class="text-xs text-slate-500">Sudah Terposting</div>
+        <div id="statPosted" class="text-2xl font-semibold mt-1">0</div>
+        <div class="text-xs text-slate-500 mt-1"><span id="statPending">0</span> menunggu jadwal</div>
+      </div>
+      <div class="bg-white rounded-xl border border-slate-200 p-4">
+        <div class="text-xs text-slate-500">Platform Aktif</div>
+        <div class="text-2xl font-semibold mt-1">3</div>
+        <div class="text-xs text-slate-500 mt-1">TikTok, IG, FB</div>
+      </div>
+      <div class="bg-white rounded-xl border border-slate-200 p-4">
+        <div class="text-xs text-slate-500">Caption Generated</div>
+        <div id="statGenerated" class="text-2xl font-semibold mt-1">0</div>
+        <div class="text-xs text-slate-500 mt-1">via template engine</div>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-3 gap-6" id="generate">
+
+      <!-- Left: Generate Form -->
+      <section class="col-span-2 bg-white rounded-xl border border-slate-200 p-6">
+        <h2 class="font-semibold mb-1">Buat Konten Baru</h2>
+        <p class="text-sm text-slate-500 mb-4">Pilih template, isi topik — sistem akan generate caption via API & masukkan ke antrian.</p>
+
+        <form id="generateForm" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Topik / Produk</label>
+            <input id="topic" type="text" required placeholder="contoh: Promo flash sale kopi susu"
+                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Template Caption</label>
+              <select id="template" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                <option value="promo">🎯 Promosi Produk</option>
+                <option value="tips">💡 Tips &amp; Edukasi</option>
+                <option value="tutorial">🎬 Tutorial / How-to</option>
+                <option value="testimoni">⭐ Testimoni Pelanggan</option>
+                <option value="behindscene">🎥 Behind The Scene</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Jadwal Posting</label>
+              <input id="schedule" type="datetime-local"
+                     class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <div class="text-xs text-slate-400 mt-1">Kosongkan = post sekarang juga.</div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-2">Platform Tujuan</label>
+            <div class="flex flex-wrap gap-2" id="platformPicker">
+              <button type="button" data-platform="tiktok"
+                      class="platform-chip active px-3 py-1.5 rounded-full border border-pink-300 bg-pink-50 text-pink-700 text-sm">
+                🎵 TikTok
+              </button>
+              <button type="button" data-platform="instagram"
+                      class="platform-chip active px-3 py-1.5 rounded-full border border-purple-300 bg-purple-50 text-purple-700 text-sm">
+                📸 Instagram Reels
+              </button>
+              <button type="button" data-platform="facebook"
+                      class="platform-chip active px-3 py-1.5 rounded-full border border-blue-300 bg-blue-50 text-blue-700 text-sm">
+                👍 Facebook Page
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">Preview Caption</label>
+            <textarea id="captionPreview" rows="6"
+                      class="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-sm font-mono"
+                      placeholder="Caption ter-generate akan muncul di sini. Bisa kamu edit sebelum kirim ke antrian."></textarea>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" id="btnGenerate"
+                    class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm hover:bg-slate-900 inline-flex items-center gap-2">
+              <span id="genIcon">✨</span>
+              <span id="genLabel">Generate Caption</span>
+            </button>
+            <button type="submit" id="btnSubmit"
+                    class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm hover:bg-brand-700">
+              📤 Kirim ke Antrian
+            </button>
+            <span id="hint" class="text-xs text-slate-400 ml-1">Caption via /api/generate · Antrian disimpan di browser.</span>
+          </div>
+        </form>
+      </section>
+
+      <!-- Right: Recent activity -->
+      <aside class="bg-white rounded-xl border border-slate-200 p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold">Aktivitas Terkini</h2>
+          <span id="activityCount" class="text-xs text-slate-400">0</span>
+        </div>
+        <ul id="activityList" class="space-y-3 text-sm max-h-[420px] overflow-y-auto pr-1">
+          <li class="text-xs text-slate-400">Belum ada aktivitas. Buat konten pertamamu ✨</li>
+        </ul>
+      </aside>
+
+    </div>
+
+    <!-- Queue Table -->
+    <section id="queue" class="bg-white rounded-xl border border-slate-200 p-6 mt-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold">Antrian Posting</h2>
+        <div class="text-xs text-slate-500 flex items-center gap-3">
+          <span>Scheduler aktif tiap <b>15 detik</b></span>
+          <span class="w-px h-3 bg-slate-200"></span>
+          <span id="schedulerLast">last check: —</span>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-left text-slate-500 border-b border-slate-200">
+            <tr>
+              <th class="py-2 font-medium">Topik</th>
+              <th class="py-2 font-medium">Template</th>
+              <th class="py-2 font-medium">Platform</th>
+              <th class="py-2 font-medium">Jadwal</th>
+              <th class="py-2 font-medium">Status</th>
+              <th class="py-2 font-medium text-right">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="queueBody" class="divide-y divide-slate-100">
+            <tr><td colspan="6" class="py-6 text-center text-slate-400 text-xs">Antrian kosong.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-400 mt-8">
+      Demo prototype · Frontend: vanilla JS + Tailwind · Backend: Vercel serverless functions (<code>/api/*</code>) · Workflow alternatif: <a class="underline" href="/workflow.n8n.json" target="_blank">workflow.n8n.json</a>
+    </footer>
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toasts" class="fixed top-4 right-4 z-50 space-y-2 w-80"></div>
+
+<script>
+// ========================================================================
+// SosMed Auto · Dashboard Logic
+// ========================================================================
+
+const STORAGE_KEY = 'sosmed-auto-state-v1';
+const SCHEDULER_INTERVAL_MS = 15_000;
+const PLATFORMS = ['tiktok', 'instagram', 'facebook'];
+
+const PLATFORM_META = {
+  tiktok:    { icon: '🎵', label: 'TikTok',          cls: 'bg-pink-50 text-pink-700' },
+  instagram: { icon: '📸', label: 'Instagram Reels', cls: 'bg-purple-50 text-purple-700' },
+  facebook:  { icon: '👍', label: 'Facebook Page',   cls: 'bg-blue-50 text-blue-700' }
+};
+
+// ---------- Client-side template engine (fallback if API fails) ----------
+const clientTemplates = {
+  promo: (t) => `🔥 PROMO SPESIAL! 🔥\n\n${t} hadir dengan penawaran terbaik buat kamu!\n\n✨ Kualitas premium\n✨ Harga bersahabat\n✨ Stok terbatas\n\nYuk order sekarang sebelum kehabisan! Link di bio 👆\n\n#promo #${slug(t)} #flashsale #shopnow`,
+  tips: (t) => `💡 TIPS HARI INI 💡\n\nMau tahu cara terbaik soal ${t}?\n\nSimpan post ini & coba terapkan ya:\n1. Mulai dari hal kecil\n2. Konsisten setiap hari\n3. Evaluasi hasilnya tiap minggu\n\nTag temanmu yang butuh tips ini! 🙌\n\n#tips #${slug(t)} #edukasi #foryou`,
+  tutorial: (t) => `🎬 TUTORIAL: ${t.toUpperCase()}\n\nStep by step bisa kamu ikutin di video ini ⬆️\n\n✅ Mudah diikuti\n✅ Tanpa alat ribet\n✅ Hasilnya kelihatan\n\nJangan lupa follow buat tutorial lainnya ya!\n\n#tutorial #howto #${slug(t)} #belajar`,
+  testimoni: (t) => `⭐ TESTIMONI PELANGGAN ⭐\n\n"${t}" — kata salah satu pelanggan setia kami 😍\n\nTerima kasih sudah percaya, kami akan terus jaga kualitas!\n\nMau jadi pelanggan berikutnya? DM sekarang 📩\n\n#testimoni #review #happycustomer`,
+  behindscene: (t) => `🎥 BEHIND THE SCENE 🎥\n\nBeginilah proses di balik ${t} yang biasa kamu lihat.\n\nSetiap detail kami perhatikan biar hasilnya maksimal 💪\n\nAda pertanyaan? Drop di komentar ya!\n\n#bts #behindthescene #process #${slug(t)}`
+};
+function slug(s) { return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+
+// ---------- State ----------
+function defaultState() {
+  return {
+    queue: [],
+    activities: [],
+    counters: { generated: 0 }
+  };
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return seedState();
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.queue)) return seedState();
+    return parsed;
+  } catch { return seedState(); }
+}
+function seedState() {
+  const today = new Date();
+  const inHours = (h) => new Date(today.getTime() + h * 3600000).toISOString();
+  const ago = (h) => new Date(today.getTime() - h * 3600000).toISOString();
+  const s = defaultState();
+  s.queue = [
+    {
+      id: uid(), topic: 'Promo Kopi Susu Weekend', template: 'promo',
+      platforms: ['tiktok','instagram'], schedule: inHours(3),
+      caption: clientTemplates.promo('Promo Kopi Susu Weekend'),
+      createdAt: ago(1), status: 'scheduled', results: {}
+    },
+    {
+      id: uid(), topic: 'Tips Memilih Biji Kopi', template: 'tips',
+      platforms: ['instagram','facebook'], schedule: inHours(22),
+      caption: clientTemplates.tips('Tips Memilih Biji Kopi'),
+      createdAt: ago(2), status: 'scheduled', results: {}
+    },
+    {
+      id: uid(), topic: 'Tutorial Latte Art Pemula', template: 'tutorial',
+      platforms: ['tiktok'], schedule: ago(6),
+      caption: clientTemplates.tutorial('Tutorial Latte Art Pemula'),
+      createdAt: ago(8), status: 'posted',
+      results: { tiktok: { success: true, postId: 'tiktok_demo_a1b2c3', postedAt: ago(6) } }
+    }
+  ];
+  s.activities = [
+    { id: uid(), level: 'success', message: 'Tutorial Latte Art berhasil diposting ke TikTok', time: ago(6) },
+    { id: uid(), level: 'info',    message: '2 konten dijadwalkan untuk besok', time: ago(2) }
+  ];
+  s.counters.generated = 3;
+  return s;
+}
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch (e) { console.warn('Failed to persist state', e); }
+}
+
+let state = loadState();
+
+// ---------- Helpers ----------
+function uid() {
+  if (crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('id-ID', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+    });
+  } catch { return iso; }
+}
+function relTime(iso) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60)    return `${Math.max(1, Math.floor(diff))} detik lalu`;
+  if (diff < 3600)  return `${Math.floor(diff / 60)} menit lalu`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
+  return `${Math.floor(diff / 86400)} hari lalu`;
+}
+function toLocalInput(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// ---------- API wrappers (with graceful fallback) ----------
+async function apiGenerate(topic, template) {
+  try {
+    const r = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, template })
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    return { ok: true, caption: data.caption, source: 'api' };
+  } catch (err) {
+    const caption = (clientTemplates[template] || clientTemplates.promo)(topic);
+    return { ok: true, caption, source: 'client-fallback', warn: err.message };
+  }
+}
+async function apiPost(caption, platform) {
+  try {
+    const r = await fetch('/api/post', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caption, platform })
+    });
+    const data = await r.json();
+    return data;
+  } catch (err) {
+    return { platform, success: false, error: 'Network: ' + err.message };
+  }
+}
+async function apiHealth() {
+  try {
+    const r = await fetch('/api/health');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } catch { return null; }
+}
+
+// ---------- Actions ----------
+function addActivity(level, message) {
+  state.activities.unshift({ id: uid(), level, message, time: new Date().toISOString() });
+  state.activities = state.activities.slice(0, 30);
+  saveState();
+  renderActivities();
+}
+function addToQueue(item) {
+  state.queue.unshift(item);
+  saveState();
+  renderQueue();
+  renderStats();
+}
+function deleteItem(id) {
+  state.queue = state.queue.filter(i => i.id !== id);
+  saveState();
+  renderQueue();
+  renderStats();
+  toast('Konten dihapus dari antrian.', 'info');
+}
+async function postItemNow(id) {
+  const item = state.queue.find(i => i.id === id);
+  if (!item) return;
+  if (item.status === 'posting') return;
+
+  item.status = 'posting';
+  item.results = item.results || {};
+  saveState();
+  renderQueue();
+
+  const results = await Promise.all(
+    item.platforms.map(async (p) => {
+      const r = await apiPost(item.caption, p);
+      item.results[p] = r;
+      saveState();
+      renderQueue();
+      return r;
+    })
+  );
+
+  const okCount = results.filter(r => r.success).length;
+  const failed  = results.filter(r => !r.success);
+
+  if (okCount === item.platforms.length) {
+    item.status = 'posted';
+    item.postedAt = new Date().toISOString();
+    addActivity('success', `"${item.topic}" terposting ke ${item.platforms.length} platform`);
+    toast('Posting berhasil ke semua platform 🎉', 'success');
+  } else if (okCount > 0) {
+    item.status = 'partial';
+    addActivity('warn', `"${item.topic}" sebagian gagal (${failed.length} dari ${item.platforms.length})`);
+    toast(`Sebagian platform gagal: ${failed.map(f => f.platform).join(', ')}`, 'warn');
+  } else {
+    item.status = 'failed';
+    addActivity('error', `"${item.topic}" gagal posting ke semua platform`);
+    toast('Semua platform gagal — cek detail di tabel.', 'error');
+  }
+  saveState();
+  renderQueue();
+  renderStats();
+}
+
+// ---------- Scheduler (client-side, runs while tab is open) ----------
+async function scheduler() {
+  const now = Date.now();
+  document.getElementById('schedulerLast').textContent =
+    'last check: ' + new Date().toLocaleTimeString('id-ID');
+  const due = state.queue.filter(i =>
+    i.status === 'scheduled' && new Date(i.schedule).getTime() <= now
+  );
+  for (const item of due) {
+    addActivity('info', `Scheduler memicu "${item.topic}"`);
+    await postItemNow(item.id);
+  }
+}
+
+// ---------- Rendering ----------
+function renderStats() {
+  const total   = state.queue.length;
+  const posted  = state.queue.filter(i => i.status === 'posted').length;
+  const pending = state.queue.filter(i => i.status === 'scheduled').length;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statPosted').textContent = posted;
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statGenerated').textContent = state.counters.generated;
+}
+function platformBadge(p, result) {
+  const meta = PLATFORM_META[p] || { icon: '•', label: p, cls: 'bg-slate-100 text-slate-600' };
+  let suffix = '';
+  if (result) {
+    if (result.success === true)  suffix = ' ✓';
+    if (result.success === false) suffix = ' ✗';
+  }
+  return `<span class="inline-block px-2 py-0.5 rounded text-xs ${meta.cls} mr-1" title="${(result && result.error) || meta.label}">${meta.icon} ${p}${suffix}</span>`;
+}
+function statusBadge(s) {
+  const map = {
+    scheduled: ['⏱ Scheduled', 'bg-amber-50 text-amber-700'],
+    posting:   ['<span class="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full spinner align-middle"></span> Posting', 'bg-blue-50 text-blue-700'],
+    posted:    ['✓ Posted',    'bg-emerald-50 text-emerald-700'],
+    partial:   ['◐ Partial',   'bg-orange-50 text-orange-700'],
+    failed:    ['✗ Failed',    'bg-rose-50 text-rose-700']
+  };
+  const [label, cls] = map[s] || [s, 'bg-slate-100 text-slate-600'];
+  return `<span class="px-2 py-0.5 rounded-full text-xs ${cls} whitespace-nowrap">${label}</span>`;
+}
+function actionButtons(item) {
+  const canPost = item.status === 'scheduled' || item.status === 'failed' || item.status === 'partial';
+  const postBtn = canPost
+    ? `<button data-act="post" data-id="${item.id}" class="text-xs px-2 py-1 rounded border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100">Post Sekarang</button>`
+    : '';
+  const delBtn  = `<button data-act="del"  data-id="${item.id}" class="text-xs px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50">Hapus</button>`;
+  return `<div class="flex justify-end gap-1">${postBtn}${delBtn}</div>`;
+}
+function renderQueue() {
+  const tbody = document.getElementById('queueBody');
+  if (!state.queue.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-400 text-xs">Antrian kosong. Buat konten pertamamu di form atas ✨</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = state.queue.map(q => `
+    <tr class="hover:bg-slate-50">
+      <td class="py-2 pr-2">
+        <div class="font-medium">${escapeHtml(q.topic)}</div>
+        <div class="text-xs text-slate-400">${relTime(q.createdAt)}</div>
+      </td>
+      <td class="py-2 capitalize text-slate-600">${q.template}</td>
+      <td class="py-2">${q.platforms.map(p => platformBadge(p, q.results && q.results[p])).join('')}</td>
+      <td class="py-2 text-slate-600">${fmtDateTime(q.schedule)}</td>
+      <td class="py-2">${statusBadge(q.status)}</td>
+      <td class="py-2 text-right">${actionButtons(q)}</td>
+    </tr>
+  `).join('');
+}
+function renderActivities() {
+  const ul = document.getElementById('activityList');
+  document.getElementById('activityCount').textContent = state.activities.length;
+  if (!state.activities.length) {
+    ul.innerHTML = `<li class="text-xs text-slate-400">Belum ada aktivitas. Buat konten pertamamu ✨</li>`;
+    return;
+  }
+  const dotColor = {
+    success: 'bg-emerald-500', info: 'bg-sky-500',
+    warn:    'bg-amber-500',   error: 'bg-rose-500'
+  };
+  ul.innerHTML = state.activities.map(a => `
+    <li class="flex gap-3">
+      <span class="w-2 h-2 mt-1.5 rounded-full ${dotColor[a.level] || 'bg-slate-400'}"></span>
+      <div>
+        <div>${escapeHtml(a.message)}</div>
+        <div class="text-xs text-slate-400">${relTime(a.time)}</div>
+      </div>
+    </li>
+  `).join('');
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[m]);
+}
+
+// ---------- Toast notifications ----------
+function toast(message, level = 'info') {
+  const box = document.getElementById('toasts');
+  const cls = {
+    success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    info:    'border-sky-200 bg-sky-50 text-sky-800',
+    warn:    'border-amber-200 bg-amber-50 text-amber-800',
+    error:   'border-rose-200 bg-rose-50 text-rose-800'
+  }[level] || 'border-slate-200 bg-white text-slate-700';
+  const el = document.createElement('div');
+  el.className = `toast-enter border ${cls} rounded-lg px-4 py-2 text-sm shadow-sm`;
+  el.textContent = message;
+  box.appendChild(el);
+  setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; }, 3500);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ---------- Init ----------
+document.getElementById('todayDate').textContent =
+  new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+// Default schedule input = 30 min from now
+document.getElementById('schedule').value = toLocalInput(new Date(Date.now() + 30 * 60 * 1000));
+
+// Platform chips
+const selectedPlatforms = new Set(PLATFORMS);
+document.querySelectorAll('#platformPicker .platform-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = btn.dataset.platform;
+    if (selectedPlatforms.has(p)) {
+      selectedPlatforms.delete(p);
+      btn.classList.remove('active'); btn.classList.add('opacity-40');
+    } else {
+      selectedPlatforms.add(p);
+      btn.classList.add('active'); btn.classList.remove('opacity-40');
+    }
+  });
+});
+
+// Generate button
+document.getElementById('btnGenerate').addEventListener('click', async () => {
+  const topic = document.getElementById('topic').value.trim();
+  const tpl   = document.getElementById('template').value;
+  if (!topic) { toast('Isi topik dulu ya!', 'warn'); return; }
+
+  const btn = document.getElementById('btnGenerate');
+  const label = document.getElementById('genLabel');
+  const icon  = document.getElementById('genIcon');
+  btn.disabled = true; label.textContent = 'Generating…'; icon.textContent = '⏳';
+
+  const result = await apiGenerate(topic, tpl);
+  document.getElementById('captionPreview').value = result.caption;
+  state.counters.generated += 1;
+  saveState();
+  renderStats();
+
+  btn.disabled = false; label.textContent = 'Generate Caption'; icon.textContent = '✨';
+
+  if (result.source === 'client-fallback') {
+    toast('API tidak terjangkau, pakai template engine lokal.', 'warn');
+    addActivity('warn', `Caption generated (fallback lokal) untuk "${topic}"`);
+  } else {
+    addActivity('info', `Caption generated via API untuk "${topic}"`);
+  }
+});
+
+// Submit to queue
+document.getElementById('generateForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const topic = document.getElementById('topic').value.trim();
+  const tpl   = document.getElementById('template').value;
+  const schedRaw = document.getElementById('schedule').value;
+  let captionText = document.getElementById('captionPreview').value.trim();
+
+  if (!topic) { toast('Isi topik dulu ya!', 'warn'); return; }
+  if (selectedPlatforms.size === 0) { toast('Pilih minimal 1 platform.', 'warn'); return; }
+
+  if (!captionText) {
+    const r = await apiGenerate(topic, tpl);
+    captionText = r.caption;
+    document.getElementById('captionPreview').value = captionText;
+    state.counters.generated += 1;
+  }
+
+  const scheduleIso = schedRaw
+    ? new Date(schedRaw).toISOString()
+    : new Date().toISOString();
+  const isImmediate = new Date(scheduleIso).getTime() <= Date.now() + 30000;
+
+  const item = {
+    id: uid(),
+    topic, template: tpl,
+    platforms: [...selectedPlatforms],
+    schedule: scheduleIso,
+    caption: captionText,
+    createdAt: new Date().toISOString(),
+    status: 'scheduled',
+    results: {}
+  };
+  addToQueue(item);
+  addActivity('info', `Konten "${topic}" ditambahkan ke antrian (${item.platforms.length} platform)`);
+
+  // Reset form (keep platforms)
+  document.getElementById('topic').value = '';
+  document.getElementById('captionPreview').value = '';
+  document.getElementById('schedule').value = toLocalInput(new Date(Date.now() + 30 * 60 * 1000));
+
+  if (isImmediate) {
+    toast('Jadwal sudah/akan segera lewat — posting sekarang.', 'info');
+    postItemNow(item.id);
+  } else {
+    toast('Konten masuk antrian. Scheduler akan eksekusi otomatis.', 'success');
+  }
+});
+
+// Queue actions (event delegation)
+document.getElementById('queueBody').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id  = btn.dataset.id;
+  const act = btn.dataset.act;
+  if (act === 'del')  deleteItem(id);
+  if (act === 'post') postItemNow(id);
+});
+
+// Reset button
+document.getElementById('btnClear').addEventListener('click', () => {
+  if (!confirm('Reset semua antrian & aktivitas?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state = seedState();
+  saveState();
+  renderAll();
+  toast('Data dashboard di-reset.', 'info');
+});
+
+// Initial render
+function renderAll() { renderStats(); renderQueue(); renderActivities(); }
+renderAll();
+
+// Periodic re-render for relative times
+setInterval(() => { renderQueue(); renderActivities(); }, 30_000);
+
+// Scheduler
+scheduler();
+setInterval(scheduler, SCHEDULER_INTERVAL_MS);
+
+// API health probe
+(async () => {
+  const h = await apiHealth();
+  const dot   = document.getElementById('apiDot');
+  const label = document.getElementById('apiStatus');
+  const mode  = document.getElementById('modeLabel');
+  if (h && h.ok) {
+    dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+    label.textContent = 'online';
+    label.className = 'font-medium text-emerald-700';
+    mode.textContent = h.mode || 'demo';
+  } else {
+    dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+    label.textContent = 'offline (fallback aktif)';
+    label.className = 'font-medium text-rose-700';
+  }
+})();
+</script>
+</body>
+</html>
